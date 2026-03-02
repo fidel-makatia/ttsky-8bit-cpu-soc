@@ -1,8 +1,8 @@
 // ============================================================================
-// Register File / Data RAM - 64 x 8-bit
+// Register File / Data RAM - 32 x 8-bit
 // ============================================================================
 // Simple single-port synchronous RAM used as data memory.
-// Upper region (0x20-0x3F) also used as hardware stack.
+// Upper region (0x10-0x1F) also used as hardware stack.
 // ============================================================================
 
 module regfile (
@@ -14,8 +14,8 @@ module regfile (
     output reg  [7:0]  rdata      // Read data
 );
 
-    // 64 bytes of data memory
-    reg [7:0] mem [0:63];
+    // 32 bytes of data memory
+    reg [7:0] mem [0:31];
 
     integer i;
 
@@ -23,14 +23,14 @@ module regfile (
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             rdata <= 8'h00;
-            for (i = 0; i < 64; i = i + 1) begin
+            for (i = 0; i < 32; i = i + 1) begin
                 mem[i] <= 8'h00;
             end
         end else begin
             if (we) begin
-                mem[addr[5:0]] <= wdata;
+                mem[addr[4:0]] <= wdata;
             end
-            rdata <= mem[addr[5:0]];
+            rdata <= mem[addr[4:0]];
         end
     end
 
