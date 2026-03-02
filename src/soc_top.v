@@ -3,7 +3,7 @@
 // ============================================================================
 // Top-level SoC module for TinyTapeout integration.
 //
-// Integrates: CPU Control, ALU, Register File, Program ROM, GPIO, UART TX
+// Integrates: CPU Control, ALU, Register File, Program ROM, GPIO, UART TX, Timer
 //
 // External Ports:
 //   clk         - System clock (target: <= 5 MHz for SKY130)
@@ -55,6 +55,12 @@ module soc_top (
     wire        uart_baud_div_we;
     wire        uart_busy;
 
+    // Timer
+    wire [7:0]  timer_prescaler;
+    wire        timer_prescaler_we;
+    wire        timer_clear;
+    wire [7:0]  timer_count;
+
     // ---- Program ROM ----
     program_rom u_rom (
         .addr   (pc),
@@ -85,6 +91,10 @@ module soc_top (
         .uart_baud_div    (uart_baud_div),
         .uart_baud_div_we (uart_baud_div_we),
         .uart_busy        (uart_busy),
+        .timer_prescaler    (timer_prescaler),
+        .timer_prescaler_we (timer_prescaler_we),
+        .timer_clear        (timer_clear),
+        .timer_count        (timer_count),
         .halted           (halted)
     );
 
@@ -117,6 +127,16 @@ module soc_top (
         .data_out      (gpio_data_to_cpu),
         .gpio_pins_out (gpio_out),
         .gpio_pins_in  (gpio_in)
+    );
+
+    // ---- Timer/Counter ----
+    timer u_timer (
+        .clk           (clk),
+        .rst_n         (rst_n),
+        .prescaler_in  (timer_prescaler),
+        .prescaler_we  (timer_prescaler_we),
+        .timer_clear   (timer_clear),
+        .count         (timer_count)
     );
 
     // ---- UART Transmitter ----

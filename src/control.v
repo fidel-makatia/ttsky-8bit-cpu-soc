@@ -9,7 +9,7 @@
 //   [15:8] = opcode
 //   [7:0]  = operand (immediate value or address)
 //
-// Opcode Map (30 instructions):
+// Opcode Map (33 instructions):
 //   8'h00 : NOP       - No operation
 //   8'h01 : LDA imm   - Load immediate into accumulator
 //   8'h02 : ADD imm   - Add immediate to accumulator
@@ -40,6 +40,9 @@
 //   8'h1B : UTXD      - Send ACC via UART TX
 //   8'h1C : UTXS      - Read UART TX status into ACC
 //   8'h1D : UBRD imm  - Set UART baud rate divisor
+//   8'h1E : TSET imm  - Set timer prescaler
+//   8'h1F : TGET      - Read timer count into ACC
+//   8'h20 : TCLR      - Clear timer count
 // ============================================================================
 
 module control (
@@ -75,6 +78,12 @@ module control (
     output reg  [7:0]  uart_baud_div,
     output reg         uart_baud_div_we,
     input  wire        uart_busy,
+
+    // Timer interface
+    output reg  [7:0]  timer_prescaler,
+    output reg         timer_prescaler_we,
+    output reg         timer_clear,
+    input  wire [7:0]  timer_count,
 
     // Status
     output wire        halted
@@ -133,12 +142,17 @@ module control (
             uart_data_we     <= 1'b0;
             uart_baud_div    <= 8'h00;
             uart_baud_div_we <= 1'b0;
+            timer_prescaler    <= 8'h00;
+            timer_prescaler_we <= 1'b0;
+            timer_clear        <= 1'b0;
         end else begin
             // Defaults: pulse signals cleared every cycle
             mem_we           <= 1'b0;
             gpio_out_en      <= 1'b0;
             uart_data_we     <= 1'b0;
             uart_baud_div_we <= 1'b0;
+            timer_prescaler_we <= 1'b0;
+            timer_clear        <= 1'b0;
 
             case (state)
                 // ================================================
@@ -265,6 +279,18 @@ module control (
                             uart_baud_div    <= operand;
                             uart_baud_div_we <= 1'b1;
                         end
+                        8'h1E: begin // TSET imm - set timer prescaler
+                            timer_prescaler    <= operand;
+                            timer_prescaler_we <= 1'b1;
+                        end
+                        8'h1F: begin // TGET - read timer (no decode action)
+                            alu_op <= 4'h0;
+                            alu_a  <= acc;
+                            alu_b  <= 8'h00;
+                        end
+                        8'h20: begin // TCLR - clear timer
+                            timer_clear <= 1'b1;
+                        end
                         default: begin
                             alu_op <= 4'h0;
                             alu_a  <= acc;
@@ -388,6 +414,17 @@ module control (
                             pc <= pc + 8'd1;
                         end
                         8'h1D: begin // UBRD
+                            pc <= pc + 8'd1;
+                        end
+                        8'h1E: begin // TSET
+                            pc <= pc + 8'd1;
+                        end
+                        8'h1F: begin // TGET
+                            acc <= timer_count;
+                            zero_flag <= (timer_count == 8'h00);
+                            pc <= pc + 8'd1;
+                        end
+                        8'h20: begin // TCLR
                             pc <= pc + 8'd1;
                         end
                         default: begin

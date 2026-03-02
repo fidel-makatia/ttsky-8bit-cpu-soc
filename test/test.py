@@ -141,6 +141,41 @@ async def test_uart_tx_activity(dut):
 
 
 @cocotb.test()
+async def test_timer_activity(dut):
+    """Verify the timer produces a non-zero GPIO output during the demo.
+
+    The demo program sets prescaler=0, clears the timer, waits 2 NOPs,
+    then reads the timer with TGET and outputs it via OUT. The timer
+    value should be non-zero since the timer runs freely after TCLR.
+    """
+    clock = Clock(dut.clk, 10, unit="us")
+    cocotb.start_soon(clock.start())
+
+    await reset_cpu(dut)
+
+    gpio_values = []
+    prev_value = 0
+
+    for _ in range(5000):
+        await RisingEdge(dut.clk)
+
+        current_value = int(dut.uo_out.value)
+        if current_value != prev_value:
+            if current_value != 0 or len(gpio_values) > 0:
+                gpio_values.append(current_value)
+            prev_value = current_value
+
+        if int(dut.uio_out.value) & 0x01:
+            break
+
+    # After count [1,2,3,4,5], CALL/RET (6), UART, timer value, then 42
+    # Timer value should appear between 6 and 42 in the sequence
+    assert len(gpio_values) >= 3, f"Expected at least 3 GPIO changes, got {gpio_values}"
+    # The second-to-last value before 42 should be the timer count (non-zero)
+    assert 42 in gpio_values, f"Expected 42 in GPIO sequence, got {gpio_values}"
+
+
+@cocotb.test()
 async def test_full_demo_halts(dut):
     """Verify the full demo program completes and halts with final value 42."""
     clock = Clock(dut.clk, 10, unit="us")

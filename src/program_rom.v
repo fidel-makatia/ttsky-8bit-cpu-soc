@@ -15,6 +15,7 @@
 //   14 = ADDA addr    15 = SUBA addr
 //   16 = PUSH         17 = POP          18 = CALL addr     19 = RET
 //   1A = JC addr      1B = UTXD         1C = UTXS          1D = UBRD imm
+//   1E = TSET imm     1F = TGET         20 = TCLR
 // ============================================================================
 
 module program_rom (
@@ -30,8 +31,9 @@ module program_rom (
     //
     // Part 1 (addr 0x00-0x07): Count 1 to 5 on GPIO, then continue
     // Part 2 (addr 0x08-0x09): Subroutine call/return demo
-    // Part 3 (addr 0x0A-0x0F): UART TX demo (send 'H')
-    // Part 4 (addr 0x10):      Halt
+    // Part 3 (addr 0x0A-0x0E): UART TX demo (send 'H')
+    // Part 4 (addr 0x0F-0x14): Timer demo
+    // Part 5 (addr 0x15-0x17): Final output and halt
     // Subroutine at addr 0x1C (28)
 
     initial begin : rom_init
@@ -62,10 +64,18 @@ module program_rom (
         rom[13] = 16'h1C_00;  // UTXS          ; read busy status
         rom[14] = 16'h0C_0D;  // JNZ  0x0D     ; wait until not busy
 
-        // ---- Part 4: Halt ----
-        rom[15] = 16'h01_2A;  // LDA  #42      ; acc = 42 (final value)
-        rom[16] = 16'h0D_00;  // OUT           ; gpio_out = 42
-        rom[17] = 16'h0F_00;  // HLT           ; done!
+        // ---- Part 4: Timer demo ----
+        rom[15] = 16'h1E_00;  // TSET #0       ; prescaler=0 (count every cycle)
+        rom[16] = 16'h20_00;  // TCLR          ; clear timer counter
+        rom[17] = 16'h00_00;  // NOP           ; let timer tick
+        rom[18] = 16'h00_00;  // NOP           ; let timer tick more
+        rom[19] = 16'h1F_00;  // TGET          ; acc = timer count
+        rom[20] = 16'h0D_00;  // OUT           ; show timer value on GPIO
+
+        // ---- Part 5: Final output and halt ----
+        rom[21] = 16'h01_2A;  // LDA  #42      ; acc = 42 (final value)
+        rom[22] = 16'h0D_00;  // OUT           ; gpio_out = 42
+        rom[23] = 16'h0F_00;  // HLT           ; done!
 
         // ---- Subroutine at addr 0x1C (28): return 6 ----
         rom[28] = 16'h01_05;  // LDA  #5       ; acc = 5
