@@ -37,9 +37,6 @@ module uart_tx (
 
     assign busy = (bit_cnt != 4'd0);
 
-    // Baud tick: fires every (baud_div+1) * 16 clocks = one bit period
-    wire baud_tick = (baud_cnt == baud_div) && (oversample == 4'd15);
-
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             baud_div   <= 8'd0;

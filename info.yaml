@@ -3,7 +3,7 @@ project:
   title:        "8-bit Accumulator CPU SoC"
   author:       "Fidel Makatia"
   discord:      ""
-  description:  "8-bit accumulator microcontroller with 35-instruction ISA, 128-word ROM, 128-byte RAM, hardware stack, 8x8 multiplier, timer, and UART TX"
+  description:  "8-bit accumulator microcontroller with 35-instruction ISA, 64-word ROM, 64-byte RAM, hardware stack, 8x8 multiplier, timer, and UART TX"
   language:     "Verilog"
   clock_hz:     5000000
 

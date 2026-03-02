@@ -1,5 +1,5 @@
 // ============================================================================
-// Program ROM - 128 x 16-bit Instruction Memory
+// Program ROM - 64 x 16-bit Instruction Memory
 // ============================================================================
 // This module is STUDENT-MODIFIABLE.
 // Students can change the program by editing the initialization below.
@@ -24,9 +24,9 @@ module program_rom (
     output wire [15:0] data
 );
 
-    reg [15:0] rom [0:127];
+    reg [15:0] rom [0:63];
 
-    assign data = rom[addr[6:0]];
+    assign data = rom[addr[5:0]];
 
     // ---- Demo Program: Showcase expanded microcontroller features ----
     //
@@ -41,7 +41,7 @@ module program_rom (
         integer i;
 
         // Clear all ROM
-        for (i = 0; i < 128; i = i + 1)
+        for (i = 0; i < 64; i = i + 1)
             rom[i] = 16'h0000;  // NOP
 
         // ---- Part 1: Count 1 to 5, output each ----

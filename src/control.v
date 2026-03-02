@@ -114,8 +114,8 @@ module control (
     reg       zero_flag;
     reg       carry_flag;
 
-    // ---- Stack pointer (7-bit, addresses 0x00-0x7F) ----
-    reg [6:0] sp;
+    // ---- Stack pointer (6-bit, addresses 0x00-0x3F) ----
+    reg [5:0] sp;
 
     // ---- Multiply high byte register ----
     reg [7:0] mul_high;
@@ -147,7 +147,7 @@ module control (
             alu_a            <= 8'h00;
             alu_b            <= 8'h00;
             alu_op           <= 4'h0;
-            sp               <= 7'h7F;
+            sp               <= 6'h3F;
             mul_high         <= 8'h00;
             mul_a            <= 8'h00;
             mul_b            <= 8'h00;
@@ -269,20 +269,20 @@ module control (
                             alu_a    <= acc;
                         end
                         8'h16: begin // PUSH - write ACC to stack
-                            mem_addr  <= {1'b0, sp};
+                            mem_addr  <= {2'b0, sp};
                             mem_wdata <= acc;
                             mem_we    <= 1'b1;
                         end
                         8'h17: begin // POP - set up read from stack
-                            mem_addr <= {1'b0, sp + 7'd1};
+                            mem_addr <= {2'b0, sp + 6'd1};
                         end
                         8'h18: begin // CALL - push return address
-                            mem_addr  <= {1'b0, sp};
+                            mem_addr  <= {2'b0, sp};
                             mem_wdata <= pc + 8'd1;
                             mem_we    <= 1'b1;
                         end
                         8'h19: begin // RET - set up read from stack
-                            mem_addr <= {1'b0, sp + 7'd1};
+                            mem_addr <= {2'b0, sp + 6'd1};
                         end
                         8'h1B: begin // MUL imm - set up multiplier
                             mul_a <= acc;
@@ -394,21 +394,21 @@ module control (
                             pc <= pc + 8'd1;
                         end
                         8'h16: begin // PUSH
-                            sp <= sp - 7'd1;
+                            sp <= sp - 6'd1;
                             pc <= pc + 8'd1;
                         end
                         8'h17: begin // POP
                             acc <= mem_rdata;
                             zero_flag <= (mem_rdata == 8'h00);
-                            sp <= sp + 7'd1;
+                            sp <= sp + 6'd1;
                             pc <= pc + 8'd1;
                         end
                         8'h18: begin // CALL
-                            sp <= sp - 7'd1;
+                            sp <= sp - 6'd1;
                             pc <= operand;
                         end
                         8'h19: begin // RET
-                            sp <= sp + 7'd1;
+                            sp <= sp + 6'd1;
                             pc <= mem_rdata;
                         end
                         8'h1A: begin // JC

@@ -4,8 +4,8 @@ This is a complete 8-bit accumulator-based microcontroller SoC with:
 
 - **35-instruction ISA**: arithmetic (ADD, SUB, INC, DEC, MUL, MULH), logic (AND, OR, XOR, NOT), shifts (SHL, SHR), memory (LDA, STA, LDM, ADDA, SUBA), branching (JMP, JZ, JNZ, JC), stack (PUSH, POP, CALL, RET), I/O (IN, OUT), peripherals (TSET, TGET, TCLR, UTXD, UTXS, UBRD), and control (NOP, HLT)
 - **3/4-stage FSM pipeline**: FETCH, DECODE, [MEM_READ], EXECUTE. The MEM_READ stage is used for memory-to-ALU instructions (ADDA/SUBA) and stack reads (POP/RET)
-- **128-word x 16-bit program ROM** with a hardcoded demo program
-- **128-byte x 8-bit data RAM** (shared with hardware stack)
+- **64-word x 16-bit program ROM** with a hardcoded demo program
+- **64-byte x 8-bit data RAM** (shared with hardware stack)
 - **Hardware stack**: 7-bit stack pointer, grows downward from 0x7F, supports PUSH/POP/CALL/RET for subroutines
 - **8x8 hardware multiplier**: combinational unsigned multiply with 16-bit result (MUL gets low byte, MULH gets high byte)
 - **8-bit timer/counter**: free-running counter with programmable 8-bit prescaler
