@@ -7,7 +7,8 @@
 //   ui_in[7:0]   -> gpio_in[7:0]   (dedicated inputs)
 //   uo_out[7:0]  -> gpio_out[7:0]  (dedicated outputs)
 //   uio_out[0]   -> halted         (CPU halt status)
-//   uio_oe       -> 8'h01          (bit 0 output, rest inputs)
+//   uio_out[1]   -> uart_tx        (UART serial output)
+//   uio_oe       -> 8'h03          (bits 0,1 output, rest inputs)
 // ============================================================================
 
 module tt_um_fidel_makatia_digital_tapeout (
@@ -22,18 +23,20 @@ module tt_um_fidel_makatia_digital_tapeout (
 );
 
     wire       halted;
+    wire       uart_tx_out;
     wire [7:0] gpio_out_internal;
 
     soc_top u_soc (
-        .clk      (clk),
-        .rst_n    (rst_n & ena),
-        .gpio_out (gpio_out_internal),
-        .gpio_in  (ui_in),
-        .halted   (halted)
+        .clk         (clk),
+        .rst_n       (rst_n & ena),
+        .gpio_out    (gpio_out_internal),
+        .gpio_in     (ui_in),
+        .uart_tx_out (uart_tx_out),
+        .halted      (halted)
     );
 
     assign uo_out  = gpio_out_internal;
-    assign uio_out = {7'b0, halted};
-    assign uio_oe  = 8'h01;
+    assign uio_out = {6'b0, uart_tx_out, halted};
+    assign uio_oe  = 8'h03;
 
 endmodule

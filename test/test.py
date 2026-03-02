@@ -16,6 +16,15 @@ async def reset_cpu(dut):
     dut.rst_n.value = 1
 
 
+async def wait_for_halt(dut, max_cycles=5000):
+    """Wait until the CPU halts, return True if halted."""
+    for _ in range(max_cycles):
+        await RisingEdge(dut.clk)
+        if int(dut.uio_out.value) & 0x01:
+            return True
+    return False
+
+
 @cocotb.test()
 async def test_reset_state(dut):
     """Verify output is zero during and immediately after reset."""
@@ -33,42 +42,33 @@ async def test_reset_state(dut):
 
 @cocotb.test()
 async def test_uio_oe(dut):
-    """Verify uio_oe is correctly configured (only bit 0 is output)."""
+    """Verify uio_oe is correctly configured (bits 0,1 are outputs)."""
     clock = Clock(dut.clk, 10, unit="us")
     cocotb.start_soon(clock.start())
 
     await reset_cpu(dut)
     await ClockCycles(dut.clk, 2)
 
-    assert int(dut.uio_oe.value) == 0x01, f"Expected uio_oe=0x01, got {int(dut.uio_oe.value):#x}"
+    assert int(dut.uio_oe.value) == 0x03, f"Expected uio_oe=0x03, got {int(dut.uio_oe.value):#x}"
 
 
 @cocotb.test()
 async def test_count_to_5(dut):
-    """Test the hardcoded demo program: count 1 to 5 on GPIO output, then halt.
+    """Test the count-to-5 portion of the demo program.
 
-    The ROM contains a program that:
-      - Loads 1 into accumulator
-      - Outputs accumulator to GPIO
-      - Increments accumulator
-      - Checks if value exceeds 5 (SUB 6, JZ halt, ADD 6 to restore)
-      - Loops back to output
-      - Halts after outputting 5
-
-    Expected GPIO output sequence: 1, 2, 3, 4, 5
+    The ROM program starts by counting 1 to 5 on GPIO output.
+    After 5, it continues to the subroutine and peripheral demos.
+    We verify the initial count sequence [1, 2, 3, 4, 5] appears.
     """
     clock = Clock(dut.clk, 10, unit="us")
     cocotb.start_soon(clock.start())
 
     await reset_cpu(dut)
 
-    # Collect GPIO output values as the CPU runs
     gpio_values = []
     prev_value = 0
 
-    # Run for enough cycles for the program to complete
-    # The 8-bit CPU has a 3-cycle pipeline (FETCH, DECODE, EXECUTE)
-    # The program loops 5 times with ~7 instructions per loop = ~105 cycles
+    # Run enough cycles to see the count-to-5 portion
     for _ in range(500):
         await RisingEdge(dut.clk)
 
@@ -77,35 +77,87 @@ async def test_count_to_5(dut):
             gpio_values.append(current_value)
             prev_value = current_value
 
-        # Check if CPU has halted
-        halted = int(dut.uio_out.value) & 0x01
-        if halted:
+        # Stop once we've collected the count sequence
+        if len(gpio_values) >= 5:
             break
-    else:
-        assert False, "CPU did not halt within 500 cycles"
 
-    # Verify the halted signal
-    assert (int(dut.uio_out.value) & 0x01) == 1, "Expected halted signal on uio_out[0]"
-
-    # Verify the GPIO output sequence
-    assert gpio_values == [1, 2, 3, 4, 5], f"Expected GPIO sequence [1,2,3,4,5], got {gpio_values}"
+    assert gpio_values[:5] == [1, 2, 3, 4, 5], \
+        f"Expected count sequence [1,2,3,4,5], got {gpio_values[:5]}"
 
 
 @cocotb.test()
-async def test_final_output(dut):
-    """Verify the final GPIO output value is 5 after the program completes."""
+async def test_call_ret_and_multiply(dut):
+    """Test CALL/RET subroutine and hardware multiply in the demo program.
+
+    After count-to-5, the program:
+      - CALLs a subroutine that returns 6, OUTs it
+      - MULs 3*7=21, OUTs it
+    Expected GPIO sequence includes: ..., 5, 6, 21, ...
+    """
     clock = Clock(dut.clk, 10, unit="us")
     cocotb.start_soon(clock.start())
 
     await reset_cpu(dut)
 
-    # Wait for halt
-    for _ in range(500):
+    gpio_values = []
+    prev_value = 0
+
+    # Run until halt to collect all GPIO output transitions
+    for _ in range(5000):
         await RisingEdge(dut.clk)
+
+        current_value = int(dut.uo_out.value)
+        if current_value != prev_value:
+            if current_value != 0 or len(gpio_values) > 0:
+                gpio_values.append(current_value)
+            prev_value = current_value
+
         if int(dut.uio_out.value) & 0x01:
             break
 
-    # The last value output before the final SUB was 5
-    # After SUB 6 (acc becomes 0) and JZ to halt, gpio_out should still hold 5
-    # because the OUT instruction latches into the GPIO register
-    assert int(dut.uo_out.value) == 5, f"Expected final gpio_out=5, got {int(dut.uo_out.value)}"
+    # The sequence should contain at least: 1, 2, 3, 4, 5, 6, 21
+    assert 6 in gpio_values, f"Expected 6 (from CALL/RET) in GPIO sequence, got {gpio_values}"
+    assert 21 in gpio_values, f"Expected 21 (from MUL 3*7) in GPIO sequence, got {gpio_values}"
+
+
+@cocotb.test()
+async def test_uart_tx_activity(dut):
+    """Verify the UART TX pin shows activity during the demo program.
+
+    The demo sends 'H' (0x48) via UART. The TX line should go low
+    (start bit) at some point during execution.
+    """
+    clock = Clock(dut.clk, 10, unit="us")
+    cocotb.start_soon(clock.start())
+
+    await reset_cpu(dut)
+
+    saw_tx_low = False
+
+    for _ in range(5000):
+        await RisingEdge(dut.clk)
+
+        # uio_out[1] is uart_tx
+        uart_tx = (int(dut.uio_out.value) >> 1) & 0x01
+        if uart_tx == 0:
+            saw_tx_low = True
+
+        if int(dut.uio_out.value) & 0x01:  # halted
+            break
+
+    assert saw_tx_low, "UART TX should go low (start bit) when sending 'H'"
+
+
+@cocotb.test()
+async def test_full_demo_halts(dut):
+    """Verify the full demo program completes and halts."""
+    clock = Clock(dut.clk, 10, unit="us")
+    cocotb.start_soon(clock.start())
+
+    await reset_cpu(dut)
+
+    halted = await wait_for_halt(dut, max_cycles=5000)
+    assert halted, "CPU should halt after the full demo program completes"
+
+    # Verify the halted signal is on uio_out[0]
+    assert (int(dut.uio_out.value) & 0x01) == 1, "Expected halted signal on uio_out[0]"

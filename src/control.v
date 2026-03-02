@@ -1,17 +1,15 @@
 // ============================================================================
 // Control Unit - CPU Finite State Machine
 // ============================================================================
-// Modified for TinyTapeout: ADDA/SUBA bug fix with MEM_READ state.
-//
 // 3/4-stage FSM: FETCH -> DECODE -> [MEM_READ] -> EXECUTE (-> FETCH ...)
-// MEM_READ stage used only for ADDA/SUBA (memory-to-ALU instructions).
+// MEM_READ stage used for ADDA/SUBA/POP/RET (memory-read-before-execute).
 // Special state: HALT stops execution.
 //
 // Instruction Format (16-bit):
 //   [15:8] = opcode
 //   [7:0]  = operand (immediate value or address)
 //
-// Opcode Map:
+// Opcode Map (35 instructions):
 //   8'h00 : NOP       - No operation
 //   8'h01 : LDA imm   - Load immediate into accumulator
 //   8'h02 : ADD imm   - Add immediate to accumulator
@@ -34,6 +32,19 @@
 //   8'h13 : DEC       - Decrement accumulator
 //   8'h14 : ADDA addr - Add memory[addr] to accumulator
 //   8'h15 : SUBA addr - Subtract memory[addr] from accumulator
+//   8'h16 : PUSH      - Push accumulator onto stack
+//   8'h17 : POP       - Pop stack top into accumulator
+//   8'h18 : CALL addr - Push return address, jump to addr
+//   8'h19 : RET       - Pop return address, jump there
+//   8'h1A : JC  addr  - Jump if carry flag set
+//   8'h1B : MUL imm   - Multiply: ACC = (ACC * imm)[7:0]
+//   8'h1C : MULH      - Load high byte of last MUL into ACC
+//   8'h1D : TSET imm  - Set timer prescaler
+//   8'h1E : TGET      - Read timer count into ACC
+//   8'h1F : TCLR      - Clear/reset timer
+//   8'h20 : UTXD      - Send ACC via UART TX
+//   8'h21 : UTXS      - Read UART TX status into ACC
+//   8'h22 : UBRD imm  - Set UART baud rate divisor
 // ============================================================================
 
 module control (
@@ -63,6 +74,24 @@ module control (
     output reg         gpio_out_en,
     input  wire [7:0]  gpio_in,
 
+    // Multiplier interface
+    output reg  [7:0]  mul_a,
+    output reg  [7:0]  mul_b,
+    input  wire [15:0] mul_product,
+
+    // Timer interface
+    output reg  [7:0]  timer_prescaler,
+    output reg         timer_prescaler_we,
+    output reg         timer_clear,
+    input  wire [7:0]  timer_count,
+
+    // UART TX interface
+    output reg  [7:0]  uart_data,
+    output reg         uart_data_we,
+    output reg  [7:0]  uart_baud_div,
+    output reg         uart_baud_div_we,
+    input  wire        uart_busy,
+
     // Status
     output wire        halted
 );
@@ -85,6 +114,12 @@ module control (
     reg       zero_flag;
     reg       carry_flag;
 
+    // ---- Stack pointer (7-bit, addresses 0x00-0x7F) ----
+    reg [6:0] sp;
+
+    // ---- Multiply high byte register ----
+    reg [7:0] mul_high;
+
     assign halted = (state == STATE_HALT);
 
     // ---- State register ----
@@ -98,24 +133,39 @@ module control (
     // ---- Main control logic ----
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            pc         <= 8'h00;
-            acc        <= 8'h00;
-            zero_flag  <= 1'b0;
-            carry_flag <= 1'b0;
-            opcode     <= 8'h00;
-            operand    <= 8'h00;
-            gpio_out   <= 8'h00;
-            gpio_out_en <= 1'b0;
-            mem_we     <= 1'b0;
-            mem_addr   <= 8'h00;
-            mem_wdata  <= 8'h00;
-            alu_a      <= 8'h00;
-            alu_b      <= 8'h00;
-            alu_op     <= 4'h0;
+            pc               <= 8'h00;
+            acc              <= 8'h00;
+            zero_flag        <= 1'b0;
+            carry_flag       <= 1'b0;
+            opcode           <= 8'h00;
+            operand          <= 8'h00;
+            gpio_out         <= 8'h00;
+            gpio_out_en      <= 1'b0;
+            mem_we           <= 1'b0;
+            mem_addr         <= 8'h00;
+            mem_wdata        <= 8'h00;
+            alu_a            <= 8'h00;
+            alu_b            <= 8'h00;
+            alu_op           <= 4'h0;
+            sp               <= 7'h7F;
+            mul_high         <= 8'h00;
+            mul_a            <= 8'h00;
+            mul_b            <= 8'h00;
+            timer_prescaler  <= 8'h00;
+            timer_prescaler_we <= 1'b0;
+            timer_clear      <= 1'b0;
+            uart_data        <= 8'h00;
+            uart_data_we     <= 1'b0;
+            uart_baud_div    <= 8'h00;
+            uart_baud_div_we <= 1'b0;
         end else begin
-            // Defaults
-            mem_we     <= 1'b0;
-            gpio_out_en <= 1'b0;
+            // Defaults: pulse signals cleared every cycle
+            mem_we           <= 1'b0;
+            gpio_out_en      <= 1'b0;
+            timer_prescaler_we <= 1'b0;
+            timer_clear      <= 1'b0;
+            uart_data_we     <= 1'b0;
+            uart_baud_div_we <= 1'b0;
 
             case (state)
                 // ================================================
@@ -127,7 +177,7 @@ module control (
                 end
 
                 // ================================================
-                // DECODE: Set up ALU and memory signals
+                // DECODE: Set up ALU, memory, and peripheral signals
                 // ================================================
                 STATE_DECODE: begin
                     case (opcode)
@@ -218,6 +268,41 @@ module control (
                             alu_op   <= 4'h2;
                             alu_a    <= acc;
                         end
+                        8'h16: begin // PUSH - write ACC to stack
+                            mem_addr  <= {1'b0, sp};
+                            mem_wdata <= acc;
+                            mem_we    <= 1'b1;
+                        end
+                        8'h17: begin // POP - set up read from stack
+                            mem_addr <= {1'b0, sp + 7'd1};
+                        end
+                        8'h18: begin // CALL - push return address
+                            mem_addr  <= {1'b0, sp};
+                            mem_wdata <= pc + 8'd1;
+                            mem_we    <= 1'b1;
+                        end
+                        8'h19: begin // RET - set up read from stack
+                            mem_addr <= {1'b0, sp + 7'd1};
+                        end
+                        8'h1B: begin // MUL imm - set up multiplier
+                            mul_a <= acc;
+                            mul_b <= operand;
+                        end
+                        8'h1D: begin // TSET imm - set timer prescaler
+                            timer_prescaler    <= operand;
+                            timer_prescaler_we <= 1'b1;
+                        end
+                        8'h1F: begin // TCLR - clear timer
+                            timer_clear <= 1'b1;
+                        end
+                        8'h20: begin // UTXD - send ACC via UART
+                            uart_data    <= acc;
+                            uart_data_we <= 1'b1;
+                        end
+                        8'h22: begin // UBRD imm - set UART baud divisor
+                            uart_baud_div    <= operand;
+                            uart_baud_div_we <= 1'b1;
+                        end
                         default: begin
                             alu_op <= 4'h0;
                             alu_a  <= acc;
@@ -227,7 +312,7 @@ module control (
                 end
 
                 // ================================================
-                // MEM_READ: Latch memory data for ADDA/SUBA
+                // MEM_READ: Wait for memory data (ADDA/SUBA/POP/RET)
                 // ================================================
                 STATE_MEM_READ: begin
                     alu_b <= mem_rdata;
@@ -308,6 +393,64 @@ module control (
                             carry_flag <= alu_carry;
                             pc <= pc + 8'd1;
                         end
+                        8'h16: begin // PUSH
+                            sp <= sp - 7'd1;
+                            pc <= pc + 8'd1;
+                        end
+                        8'h17: begin // POP
+                            acc <= mem_rdata;
+                            zero_flag <= (mem_rdata == 8'h00);
+                            sp <= sp + 7'd1;
+                            pc <= pc + 8'd1;
+                        end
+                        8'h18: begin // CALL
+                            sp <= sp - 7'd1;
+                            pc <= operand;
+                        end
+                        8'h19: begin // RET
+                            sp <= sp + 7'd1;
+                            pc <= mem_rdata;
+                        end
+                        8'h1A: begin // JC
+                            if (carry_flag)
+                                pc <= operand;
+                            else
+                                pc <= pc + 8'd1;
+                        end
+                        8'h1B: begin // MUL imm
+                            acc      <= mul_product[7:0];
+                            mul_high <= mul_product[15:8];
+                            zero_flag  <= (mul_product[7:0] == 8'h00);
+                            carry_flag <= (mul_product[15:8] != 8'h00);
+                            pc <= pc + 8'd1;
+                        end
+                        8'h1C: begin // MULH
+                            acc <= mul_high;
+                            zero_flag <= (mul_high == 8'h00);
+                            pc <= pc + 8'd1;
+                        end
+                        8'h1D: begin // TSET
+                            pc <= pc + 8'd1;
+                        end
+                        8'h1E: begin // TGET
+                            acc <= timer_count;
+                            zero_flag <= (timer_count == 8'h00);
+                            pc <= pc + 8'd1;
+                        end
+                        8'h1F: begin // TCLR
+                            pc <= pc + 8'd1;
+                        end
+                        8'h20: begin // UTXD
+                            pc <= pc + 8'd1;
+                        end
+                        8'h21: begin // UTXS
+                            acc <= {7'b0, uart_busy};
+                            zero_flag <= ~uart_busy;
+                            pc <= pc + 8'd1;
+                        end
+                        8'h22: begin // UBRD
+                            pc <= pc + 8'd1;
+                        end
                         default: begin
                             pc <= pc + 8'd1;
                         end
@@ -326,7 +469,8 @@ module control (
         case (state)
             STATE_FETCH:   next_state = STATE_DECODE;
             STATE_DECODE: begin
-                if (opcode == 8'h14 || opcode == 8'h15)
+                if (opcode == 8'h14 || opcode == 8'h15 ||  // ADDA, SUBA
+                    opcode == 8'h17 || opcode == 8'h19)     // POP, RET
                     next_state = STATE_MEM_READ;
                 else
                     next_state = STATE_EXECUTE;
