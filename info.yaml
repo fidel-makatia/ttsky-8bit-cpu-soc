@@ -3,7 +3,7 @@ project:
   title:        "8-bit Accumulator CPU SoC"
   author:       "Fidel Makatia"
   discord:      ""
-  description:  "8-bit accumulator microcontroller with 35-instruction ISA, 32-word ROM, 32-byte RAM, hardware stack, 8x8 multiplier, timer, and UART TX"
+  description:  "8-bit accumulator microcontroller with 30-instruction ISA, 32-word ROM, 32-byte RAM, hardware stack, and UART TX"
   language:     "Verilog"
   clock_hz:     5000000
 
@@ -23,8 +23,6 @@ project:
     - "program_rom.v"
     - "regfile.v"
     - "gpio.v"
-    - "multiplier.v"
-    - "timer.v"
     - "uart_tx.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.

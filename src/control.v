@@ -9,7 +9,7 @@
 //   [15:8] = opcode
 //   [7:0]  = operand (immediate value or address)
 //
-// Opcode Map (35 instructions):
+// Opcode Map (30 instructions):
 //   8'h00 : NOP       - No operation
 //   8'h01 : LDA imm   - Load immediate into accumulator
 //   8'h02 : ADD imm   - Add immediate to accumulator
@@ -37,14 +37,9 @@
 //   8'h18 : CALL addr - Push return address, jump to addr
 //   8'h19 : RET       - Pop return address, jump there
 //   8'h1A : JC  addr  - Jump if carry flag set
-//   8'h1B : MUL imm   - Multiply: ACC = (ACC * imm)[7:0]
-//   8'h1C : MULH      - Load high byte of last MUL into ACC
-//   8'h1D : TSET imm  - Set timer prescaler
-//   8'h1E : TGET      - Read timer count into ACC
-//   8'h1F : TCLR      - Clear/reset timer
-//   8'h20 : UTXD      - Send ACC via UART TX
-//   8'h21 : UTXS      - Read UART TX status into ACC
-//   8'h22 : UBRD imm  - Set UART baud rate divisor
+//   8'h1B : UTXD      - Send ACC via UART TX
+//   8'h1C : UTXS      - Read UART TX status into ACC
+//   8'h1D : UBRD imm  - Set UART baud rate divisor
 // ============================================================================
 
 module control (
@@ -73,17 +68,6 @@ module control (
     output reg  [7:0]  gpio_out,
     output reg         gpio_out_en,
     input  wire [7:0]  gpio_in,
-
-    // Multiplier interface
-    output reg  [7:0]  mul_a,
-    output reg  [7:0]  mul_b,
-    input  wire [15:0] mul_product,
-
-    // Timer interface
-    output reg  [7:0]  timer_prescaler,
-    output reg         timer_prescaler_we,
-    output reg         timer_clear,
-    input  wire [7:0]  timer_count,
 
     // UART TX interface
     output reg  [7:0]  uart_data,
@@ -117,9 +101,6 @@ module control (
     // ---- Stack pointer (5-bit, addresses 0x00-0x1F) ----
     reg [4:0] sp;
 
-    // ---- Multiply high byte register ----
-    reg [7:0] mul_high;
-
     assign halted = (state == STATE_HALT);
 
     // ---- State register ----
@@ -148,12 +129,6 @@ module control (
             alu_b            <= 8'h00;
             alu_op           <= 4'h0;
             sp               <= 5'h1F;
-            mul_high         <= 8'h00;
-            mul_a            <= 8'h00;
-            mul_b            <= 8'h00;
-            timer_prescaler  <= 8'h00;
-            timer_prescaler_we <= 1'b0;
-            timer_clear      <= 1'b0;
             uart_data        <= 8'h00;
             uart_data_we     <= 1'b0;
             uart_baud_div    <= 8'h00;
@@ -162,8 +137,6 @@ module control (
             // Defaults: pulse signals cleared every cycle
             mem_we           <= 1'b0;
             gpio_out_en      <= 1'b0;
-            timer_prescaler_we <= 1'b0;
-            timer_clear      <= 1'b0;
             uart_data_we     <= 1'b0;
             uart_baud_div_we <= 1'b0;
 
@@ -284,22 +257,11 @@ module control (
                         8'h19: begin // RET - set up read from stack
                             mem_addr <= {3'b0, sp + 5'd1};
                         end
-                        8'h1B: begin // MUL imm - set up multiplier
-                            mul_a <= acc;
-                            mul_b <= operand;
-                        end
-                        8'h1D: begin // TSET imm - set timer prescaler
-                            timer_prescaler    <= operand;
-                            timer_prescaler_we <= 1'b1;
-                        end
-                        8'h1F: begin // TCLR - clear timer
-                            timer_clear <= 1'b1;
-                        end
-                        8'h20: begin // UTXD - send ACC via UART
+                        8'h1B: begin // UTXD - send ACC via UART
                             uart_data    <= acc;
                             uart_data_we <= 1'b1;
                         end
-                        8'h22: begin // UBRD imm - set UART baud divisor
+                        8'h1D: begin // UBRD imm - set UART baud divisor
                             uart_baud_div    <= operand;
                             uart_baud_div_we <= 1'b1;
                         end
@@ -417,38 +379,15 @@ module control (
                             else
                                 pc <= pc + 8'd1;
                         end
-                        8'h1B: begin // MUL imm
-                            acc      <= mul_product[7:0];
-                            mul_high <= mul_product[15:8];
-                            zero_flag  <= (mul_product[7:0] == 8'h00);
-                            carry_flag <= (mul_product[15:8] != 8'h00);
+                        8'h1B: begin // UTXD
                             pc <= pc + 8'd1;
                         end
-                        8'h1C: begin // MULH
-                            acc <= mul_high;
-                            zero_flag <= (mul_high == 8'h00);
-                            pc <= pc + 8'd1;
-                        end
-                        8'h1D: begin // TSET
-                            pc <= pc + 8'd1;
-                        end
-                        8'h1E: begin // TGET
-                            acc <= timer_count;
-                            zero_flag <= (timer_count == 8'h00);
-                            pc <= pc + 8'd1;
-                        end
-                        8'h1F: begin // TCLR
-                            pc <= pc + 8'd1;
-                        end
-                        8'h20: begin // UTXD
-                            pc <= pc + 8'd1;
-                        end
-                        8'h21: begin // UTXS
+                        8'h1C: begin // UTXS
                             acc <= {7'b0, uart_busy};
                             zero_flag <= ~uart_busy;
                             pc <= pc + 8'd1;
                         end
-                        8'h22: begin // UBRD
+                        8'h1D: begin // UBRD
                             pc <= pc + 8'd1;
                         end
                         default: begin

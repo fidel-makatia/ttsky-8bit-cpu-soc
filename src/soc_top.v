@@ -3,8 +3,7 @@
 // ============================================================================
 // Top-level SoC module for TinyTapeout integration.
 //
-// Integrates: CPU Control, ALU, Register File, Program ROM, GPIO,
-//             Hardware Multiplier, Timer, UART TX
+// Integrates: CPU Control, ALU, Register File, Program ROM, GPIO, UART TX
 //
 // External Ports:
 //   clk         - System clock (target: <= 5 MHz for SKY130)
@@ -49,17 +48,6 @@ module soc_top (
     wire [7:0]  gpio_data_from_cpu;
     wire        gpio_write_en;
 
-    // Multiplier
-    wire [7:0]  mul_a;
-    wire [7:0]  mul_b;
-    wire [15:0] mul_product;
-
-    // Timer
-    wire [7:0]  timer_prescaler;
-    wire        timer_prescaler_we;
-    wire        timer_clear;
-    wire [7:0]  timer_count;
-
     // UART TX
     wire [7:0]  uart_data;
     wire        uart_data_we;
@@ -92,13 +80,6 @@ module soc_top (
         .gpio_out         (gpio_data_from_cpu),
         .gpio_out_en      (gpio_write_en),
         .gpio_in          (gpio_data_to_cpu),
-        .mul_a            (mul_a),
-        .mul_b            (mul_b),
-        .mul_product      (mul_product),
-        .timer_prescaler  (timer_prescaler),
-        .timer_prescaler_we (timer_prescaler_we),
-        .timer_clear      (timer_clear),
-        .timer_count      (timer_count),
         .uart_data        (uart_data),
         .uart_data_we     (uart_data_we),
         .uart_baud_div    (uart_baud_div),
@@ -136,23 +117,6 @@ module soc_top (
         .data_out      (gpio_data_to_cpu),
         .gpio_pins_out (gpio_out),
         .gpio_pins_in  (gpio_in)
-    );
-
-    // ---- Hardware Multiplier ----
-    multiplier u_mul (
-        .a       (mul_a),
-        .b       (mul_b),
-        .product (mul_product)
-    );
-
-    // ---- Timer ----
-    timer u_timer (
-        .clk           (clk),
-        .rst_n         (rst_n),
-        .prescaler_in  (timer_prescaler),
-        .prescaler_we  (timer_prescaler_we),
-        .timer_clear   (timer_clear),
-        .count         (timer_count)
     );
 
     // ---- UART Transmitter ----

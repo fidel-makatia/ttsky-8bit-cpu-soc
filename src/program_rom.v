@@ -14,9 +14,7 @@
 //   10 = SHL          11 = SHR          12 = INC           13 = DEC
 //   14 = ADDA addr    15 = SUBA addr
 //   16 = PUSH         17 = POP          18 = CALL addr     19 = RET
-//   1A = JC addr      1B = MUL imm      1C = MULH          1D = TSET imm
-//   1E = TGET         1F = TCLR         20 = UTXD          21 = UTXS
-//   22 = UBRD imm
+//   1A = JC addr      1B = UTXD         1C = UTXS          1D = UBRD imm
 // ============================================================================
 
 module program_rom (
@@ -30,12 +28,11 @@ module program_rom (
 
     // ---- Demo Program: Showcase expanded microcontroller features ----
     //
-    // Part 1 (addr 0x00-0x08): Count 1 to 5 on GPIO, then continue
-    // Part 2 (addr 0x09-0x0D): Subroutine call/return demo
-    // Part 3 (addr 0x0E-0x11): Hardware multiplier demo
-    // Part 4 (addr 0x12-0x17): UART TX demo (send 'H')
-    // Part 5 (addr 0x18-0x1A): Timer demo
-    // Subroutine at addr 0x20
+    // Part 1 (addr 0x00-0x07): Count 1 to 5 on GPIO, then continue
+    // Part 2 (addr 0x08-0x09): Subroutine call/return demo
+    // Part 3 (addr 0x0A-0x0F): UART TX demo (send 'H')
+    // Part 4 (addr 0x10):      Halt
+    // Subroutine at addr 0x1C (28)
 
     initial begin : rom_init
         integer i;
@@ -58,26 +55,17 @@ module program_rom (
         rom[8]  = 16'h18_1C;  // CALL 0x1C     ; call subroutine at addr 28
         rom[9]  = 16'h0D_00;  // OUT           ; gpio_out = result (6)
 
-        // ---- Part 3: Hardware multiplier ----
-        rom[10] = 16'h01_03;  // LDA  #3       ; acc = 3
-        rom[11] = 16'h1B_07;  // MUL  #7       ; acc = (3*7)[7:0] = 21
-        rom[12] = 16'h0D_00;  // OUT           ; gpio_out = 21
+        // ---- Part 3: UART TX - send 'H' (0x48) ----
+        rom[10] = 16'h1D_19;  // UBRD #25      ; set baud divider
+        rom[11] = 16'h01_48;  // LDA  #0x48    ; 'H'
+        rom[12] = 16'h1B_00;  // UTXD          ; start UART send
+        rom[13] = 16'h1C_00;  // UTXS          ; read busy status
+        rom[14] = 16'h0C_0D;  // JNZ  0x0D     ; wait until not busy
 
-        // ---- Part 4: UART TX - send 'H' (0x48) ----
-        rom[13] = 16'h22_19;  // UBRD #25      ; set baud divider
-        rom[14] = 16'h01_48;  // LDA  #0x48    ; 'H'
-        rom[15] = 16'h20_00;  // UTXD          ; start UART send
-        rom[16] = 16'h21_00;  // UTXS          ; read busy status
-        rom[17] = 16'h0C_10;  // JNZ  0x10     ; wait until not busy
-
-        // ---- Part 5: Timer demo ----
-        rom[18] = 16'h1D_FF;  // TSET #255     ; set prescaler to max
-        rom[19] = 16'h1F_00;  // TCLR          ; clear timer
-        rom[20] = 16'h1E_00;  // TGET          ; read timer count
-        rom[21] = 16'h0D_00;  // OUT           ; show on GPIO
-
-        // ---- Halt ----
-        rom[22] = 16'h0F_00;  // HLT           ; done!
+        // ---- Part 4: Halt ----
+        rom[15] = 16'h01_2A;  // LDA  #42      ; acc = 42 (final value)
+        rom[16] = 16'h0D_00;  // OUT           ; gpio_out = 42
+        rom[17] = 16'h0F_00;  // HLT           ; done!
 
         // ---- Subroutine at addr 0x1C (28): return 6 ----
         rom[28] = 16'h01_05;  // LDA  #5       ; acc = 5
