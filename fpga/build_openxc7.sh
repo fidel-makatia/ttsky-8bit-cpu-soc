@@ -54,7 +54,7 @@ VERILOG_FILES=(
     "${SRC_DIR}/soc_top.v"
     "${SRC_DIR}/control.v"
     "${SRC_DIR}/alu.v"
-    "${SRC_DIR}/program_rom.v"
+    "${FPGA_DIR}/program_rom_fpga.v"
     "${SRC_DIR}/regfile.v"
     "${SRC_DIR}/gpio.v"
     "${SRC_DIR}/uart_tx.v"
