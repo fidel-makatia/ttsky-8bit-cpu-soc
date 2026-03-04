@@ -46,8 +46,8 @@ module uart_tx (
             bit_cnt    <= 4'd0;
             tx         <= 1'b1;  // Idle high
         end else begin
-            // Baud divisor register
-            if (baud_div_we)
+            // Baud divisor register (only update when not transmitting)
+            if (baud_div_we && !busy)
                 baud_div <= baud_div_in;
 
             // Load new data

@@ -32,7 +32,19 @@ module gpio (
         end
     end
 
-    // Input is directly passed through (no latching, synchronous read by CPU)
-    assign data_out = gpio_pins_in;
+    // 2-stage synchronizer for external input (prevents metastability on ASIC)
+    reg [7:0] gpio_in_sync1, gpio_in_sync2;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            gpio_in_sync1 <= 8'h00;
+            gpio_in_sync2 <= 8'h00;
+        end else begin
+            gpio_in_sync1 <= gpio_pins_in;
+            gpio_in_sync2 <= gpio_in_sync1;
+        end
+    end
+
+    assign data_out = gpio_in_sync2;
 
 endmodule

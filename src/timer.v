@@ -23,13 +23,15 @@ module timer (
             prescale_count <= 8'h00;
             count          <= 8'h00;
         end else begin
-            if (prescaler_we)
-                prescaler <= prescaler_in;
+            if (prescaler_we) begin
+                prescaler      <= prescaler_in;
+                prescale_count <= 8'h00;
+            end
 
             if (timer_clear) begin
                 count          <= 8'h00;
                 prescale_count <= 8'h00;
-            end else if (prescale_count == prescaler) begin
+            end else if (prescale_count >= prescaler) begin
                 prescale_count <= 8'h00;
                 count          <= count + 8'h01;
             end else begin
