@@ -34,5 +34,6 @@ set_property -dict { PACKAGE_PIN K14   IOSTANDARD LVCMOS33 } [get_ports { ja_upp
 set_property -dict { PACKAGE_PIN N16   IOSTANDARD LVCMOS33 } [get_ports { ja_uart_tx }];
 set_property -dict { PACKAGE_PIN L15   IOSTANDARD LVCMOS33 } [get_ports { ja_halted }];
 
-## ---- Timing: tell Vivado about the derived 5 MHz clock ----
-create_generated_clock -name clk_5mhz -source [get_ports sys_clk] -divide_by 25 [get_pins {clk_cnt_reg[4]/Q}]
+## ---- Timing: derived clock constraint (disabled for test mode) ----
+## CPU runs at ~4 Hz; only sys_clk domain needs timing closure.
+## create_generated_clock -name clk_slow -source [get_ports sys_clk] -divide_by 31250000 [get_pins clk_slow_reg/Q]

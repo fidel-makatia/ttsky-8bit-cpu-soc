@@ -1,15 +1,9 @@
 // ============================================================================
-// FPGA Top-Level Wrapper for Zybo Z7-010
+// FPGA Top-Level Wrapper for Zybo Z7-010 (Comprehensive Test Mode)
 // ============================================================================
-// Maps the 8-bit CPU SoC onto the Zybo Z7-010 board:
-//
-//   125 MHz on-board clock → 5 MHz divided clock for SoC
-//   BTN0                   → Reset (debounced, active-high → active-low)
-//   LED0-LED3              → gpio_out[3:0]
-//   SW0-SW3                → gpio_in[3:0]
-//   PMOD JA[3:0]           → gpio_out[7:4]
-//   PMOD JA pin 7          → UART TX
-//   PMOD JA pin 8          → Halted indicator
+// LED0-LED3 = gpio_out[3:0] showing test phase numbers 1-F
+// BTN0      = Reset (press to restart test sequence)
+// CPU clock = ~4 Hz (each test step visible for ~1 second)
 // ============================================================================
 
 module top_zybo (
@@ -31,33 +25,47 @@ module top_zybo (
     output wire       ja_halted   // Halt indicator
 );
 
-    // ---- Clock divider: 125 MHz → 5 MHz ----
-    // Divide by 25: count 0-24, output high for 13 cycles, low for 12
-    // Frequency = 125 MHz / 25 = 5 MHz (52% duty cycle)
+    // ---- Clock divider: 125 MHz → ~4 Hz for visible test stepping ----
+    // 125_000_000 / (2 * 15_625_000) = 4 Hz
+    // Each instruction (3 cycles) takes ~0.75 seconds → clearly visible
 
-    reg [4:0] clk_cnt = 5'd0;
-    reg       clk_5mhz = 1'b0;
+    localparam CLK_DIV = 15_625_000;
+
+    reg [23:0] clk_cnt = 24'd0;
+    reg        clk_slow = 1'b0;
 
     always @(posedge sys_clk) begin
-        if (clk_cnt == 5'd24)
-            clk_cnt <= 5'd0;
-        else
-            clk_cnt <= clk_cnt + 5'd1;
+        if (clk_cnt == CLK_DIV - 1) begin
+            clk_cnt  <= 24'd0;
+            clk_slow <= ~clk_slow;
+        end else begin
+            clk_cnt <= clk_cnt + 24'd1;
+        end
+    end
 
-        clk_5mhz <= (clk_cnt < 5'd13);
+    // ---- Power-on reset ----
+    // Hold rst_n low for first 8 slow clock cycles after FPGA configuration.
+    // This ensures all CPU registers are properly initialized via async reset.
+
+    reg [3:0] por_cnt = 4'd0;
+    wire      por_done = por_cnt[3];   // High after 8 slow clocks (~2 sec)
+
+    always @(posedge clk_slow) begin
+        if (!por_done)
+            por_cnt <= por_cnt + 4'd1;
     end
 
     // ---- Reset debouncer ----
-    // BTN0 is active-high and noisy. Sample it with a shift register
-    // clocked at 5 MHz. Reset is asserted (rst_n=0) when all 4 samples
-    // show the button pressed.
+    // BTN0 is active-high. Sample with shift register clocked at slow clock.
+    // Reset asserted (rst_n=0) when all 4 samples show button pressed.
 
     reg [3:0] btn_shift = 4'b0000;
 
-    always @(posedge clk_5mhz)
+    always @(posedge clk_slow)
         btn_shift <= {btn_shift[2:0], btn0};
 
-    wire rst_n = ~(&btn_shift);  // Active-low: 0 when all 4 samples are 1
+    // rst_n low during power-on OR when button held
+    wire rst_n = por_done & ~(&btn_shift);
 
     // ---- SoC instance ----
 
@@ -66,7 +74,7 @@ module top_zybo (
     wire       halted;
 
     soc_top u_soc (
-        .clk         (clk_5mhz),
+        .clk         (clk_slow),
         .rst_n       (rst_n),
         .gpio_out    (gpio_out),
         .gpio_in     ({4'b0000, sw}),   // Upper 4 bits tied low
@@ -76,9 +84,9 @@ module top_zybo (
 
     // ---- Output mapping ----
 
-    assign led       = gpio_out[3:0];  // On-board LEDs
-    assign ja_upper  = gpio_out[7:4];  // PMOD JA pins 1-4
-    assign ja_uart_tx = uart_tx_out;   // PMOD JA pin 7
-    assign ja_halted  = halted;        // PMOD JA pin 8
+    assign led        = gpio_out[3:0];  // All 4 LEDs show test phase number
+    assign ja_upper   = gpio_out[7:4];  // PMOD JA pins 1-4
+    assign ja_uart_tx = uart_tx_out;    // PMOD JA pin 7
+    assign ja_halted  = halted;         // PMOD JA pin 8
 
 endmodule

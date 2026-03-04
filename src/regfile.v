@@ -11,7 +11,7 @@ module regfile (
     input  wire        we,        // Write enable
     input  wire [7:0]  addr,      // Address
     input  wire [7:0]  wdata,     // Write data
-    output reg  [7:0]  rdata      // Read data
+    output wire [7:0]  rdata      // Read data (combinational)
 );
 
     // 32 bytes of data memory
@@ -19,18 +19,17 @@ module regfile (
 
     integer i;
 
-    // Synchronous read and write
+    // Combinational read (data available same cycle as address change)
+    assign rdata = mem[addr[4:0]];
+
+    // Synchronous write with async reset
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            rdata <= 8'h00;
             for (i = 0; i < 32; i = i + 1) begin
                 mem[i] <= 8'h00;
             end
-        end else begin
-            if (we) begin
-                mem[addr[4:0]] <= wdata;
-            end
-            rdata <= mem[addr[4:0]];
+        end else if (we) begin
+            mem[addr[4:0]] <= wdata;
         end
     end
 
